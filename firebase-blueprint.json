@@ -1,0 +1,136 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Base user profile for all roles",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "role": { "type": "string", "enum": ["admin", "manager", "teacher", "student"] },
+        "fullName": { "type": "string" },
+        "phoneNumber": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role", "fullName"]
+    },
+    "StudentProfile": {
+      "title": "StudentProfile",
+      "description": "Extended profile for students",
+      "type": "object",
+      "properties": {
+        "passportNumber": { "type": "string" },
+        "address": { "type": "string" },
+        "enrollmentStatus": { "type": "string", "enum": ["applicant", "student", "graduated", "dropped"] },
+        "group": { "type": "string" },
+        "practiceHours": { "type": "number" },
+        "labWorkCount": { "type": "number" },
+        "certifications": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "Lead": {
+      "title": "Lead/Deal",
+      "description": "Sales lead or active deal",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "fullName": { "type": "string" },
+        "phoneNumber": { "type": "string" },
+        "email": { "type": "string" },
+        "status": { "type": "string", "enum": ["new", "contacted", "qualified", "proposal", "negotiation", "won", "lost"] },
+        "value": { "type": "number" },
+        "assignedManagerId": { "type": "string" },
+        "source": { "type": "string", "enum": ["website", "telegram", "instagram", "manual", "call"] },
+        "externalId": { "type": "string", "description": "ID from external channel (e.g. TG chat id)" },
+        "notes": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["fullName", "status"]
+    },
+    "Integration": {
+      "title": "Integration",
+      "description": "Settings for external channels",
+      "type": "object",
+      "properties": {
+        "channel": { "type": "string", "enum": ["telegram", "instagram"] },
+        "token": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["channel", "token"]
+    },
+    "Client": {
+      "title": "Client",
+      "description": "Sales client added by operators",
+      "type": "object",
+      "properties": {
+        "fullName": { "type": "string" },
+        "dob": { "type": "string", "format": "date" },
+        "phoneNumber": { "type": "string" },
+        "status": { "type": "string", "enum": ["Yangi", "O'ylayapti", "Rozi", "Rad etdi"] },
+        "operatorId": { "type": "string" },
+        "operatorName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["fullName", "phoneNumber", "status", "operatorId"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profile documents"
+    },
+    "/leads/{leadId}": {
+      "schema": "Lead",
+      "description": "Sales leads and deals"
+    },
+    "/integrations/{integrationId}": {
+      "schema": "Integration",
+      "description": "Channel integration settings"
+    },
+    "/students/{studentId}": {
+      "schema": "StudentProfile",
+      "description": "Student records"
+    },
+    "/staff/{staffId}": {
+      "schema": { "type": "object" },
+      "description": "Staff member records"
+    },
+    "/messages/{messageId}": {
+      "schema": {
+        "type": "object",
+        "properties": {
+          "text": { "type": "string" },
+          "senderId": { "type": "string" },
+          "senderName": { "type": "string" },
+          "senderPhoto": { "type": "string" },
+          "receiverId": { "type": "string" },
+          "channel": { "type": "string", "enum": ["internal", "telegram", "instagram"] },
+          "externalChatId": { "type": "string" },
+          "read": { "type": "boolean" },
+          "createdAt": { "type": "string", "format": "date-time" }
+        },
+        "required": ["text", "senderId", "receiverId", "createdAt"]
+      },
+      "description": "Chat messages with omnichannel support"
+    },
+    "/attendance/{attendanceId}": {
+      "schema": { "type": "object" },
+      "description": "Attendance records"
+    },
+    "/grades/{gradeId}": {
+      "schema": { "type": "object" },
+      "description": "Student grades"
+    },
+    "/payments/{paymentId}": {
+      "schema": { "type": "object" },
+      "description": "Financial transactions"
+    },
+    "/clients/{clientId}": {
+      "schema": "Client",
+      "description": "Sales clients"
+    }
+  }
+}

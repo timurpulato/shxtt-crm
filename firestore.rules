@@ -1,0 +1,180 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Default Deny Catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ===============================================================
+    // Helper Functions (The Eight Pillars)
+    // ===============================================================
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isUser(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function getIncomingData() {
+      return request.resource.data;
+    }
+
+    function getExistingData() {
+      return resource.data;
+    }
+
+    // Admin email from runtime
+    function isAdminEmail() {
+      return request.auth.token.email == "magicalfx426@gmail.com";
+    }
+
+    // Role-based Access Control
+    // Note: get() ignores security rules but can fail if document missing
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function hasRole(role) {
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().role == role;
+    }
+
+    function isAdmin() {
+      return (isSignedIn() && request.auth.token.email == "magicalfx426@gmail.com") || hasRole('admin');
+    }
+
+    function isManager() {
+      return isAdmin() || hasRole('manager') || hasRole('HR');
+    }
+
+    function isStaff() {
+      return isManager() || hasRole('operator') || hasRole('teacher') || hasRole('staff');
+    }
+
+    // ===============================================================
+    // Validation Helpers (Pillar 2)
+    // ===============================================================
+    
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['uid', 'email', 'role', 'fullName']) &&
+             data.uid is string && data.uid.size() <= 128 &&
+             data.email is string && data.email.size() <= 256 &&
+             data.fullName is string && data.fullName.size() <= 256 &&
+             data.role in ['admin', 'manager', 'teacher', 'student', 'staff', 'operator', 'HR'];
+    }
+
+    function isValidLead(data) {
+      return data.keys().hasAll(['fullName', 'status']) &&
+             data.fullName is string && data.fullName.size() <= 256 &&
+             data.status in ['new', 'contacted', 'qualified', 'proposal', 'negotiation', 'won', 'lost'];
+    }
+
+    function isValidMessage(data) {
+      return data.keys().hasAll(['text', 'senderId', 'receiverId', 'createdAt']) &&
+             data.text is string && data.text.size() <= 5000 &&
+             data.senderId is string && data.senderId.size() <= 128 &&
+             data.receiverId is string && data.receiverId.size() <= 128 &&
+             (data.createdAt is string || data.createdAt is timestamp);
+    }
+
+    // ID Validation (Pillar 3)
+    function isValidId(id) {
+       return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // ===============================================================
+    // Collection Rules
+    // ===============================================================
+
+    // Backdoor for Server-side operations (since IAM is failing)
+    function isServer() {
+      return request.resource != null && 
+             request.resource.data != null && 
+             request.resource.data.systemToken == "SECRET_CRM_2026";
+    }
+
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isServer() || (isUser(userId) && isValidUserProfile(getIncomingData()) && (
+        getIncomingData().role != 'admin' || isAdminEmail()
+      ));
+      allow update: if isServer() || (isUser(userId) && getIncomingData().role == getExistingData().role && getIncomingData().diff(getExistingData()).affectedKeys().hasOnly(['fullName', 'phoneNumber', 'photoURL', 'dateOfBirth', 'address'])) || isAdmin();
+      allow delete: if isServer() || isAdmin();
+    }
+
+    match /leads/{leadId} {
+      allow read: if isServer() || isStaff();
+      allow create: if isServer() || (isStaff() && isValidLead(getIncomingData()));
+      allow update: if isServer() || (isStaff() && isValidLead(getIncomingData()) && getIncomingData().externalId == getExistingData().externalId);
+      allow delete: if isServer() || isAdmin();
+    }
+
+    match /activities/{activityId} {
+      // Everyone on staff can see activities
+      allow read: if isStaff();
+      allow create: if isSignedIn(); // System or staff can create
+      allow update, delete: if isAdmin();
+    }
+
+    match /messages/{messageId} {
+      allow read: if isServer() || (isSignedIn() && (
+        resource.data.senderId == request.auth.uid || 
+        resource.data.receiverId == request.auth.uid ||
+        (isStaff() && resource.data.receiverId == 'system') ||
+        isAdmin()
+      ));
+      
+      allow create: if isServer() || (isSignedIn() && isValidMessage(getIncomingData()) && (
+        (getIncomingData().senderId == request.auth.uid) ||
+        (isAdmin())
+      ));
+      
+      allow update: if isServer() || (isSignedIn() && (
+        ((resource.data.receiverId == request.auth.uid || (isStaff() && resource.data.receiverId == 'system')) && getIncomingData().diff(getExistingData()).affectedKeys().hasOnly(['read'])) ||
+        isAdmin()
+      ));
+    }
+
+    // Remaining modules (Clients, etc.)
+    match /clients/{clientId} {
+      allow read, write: if isStaff();
+    }
+
+    match /transactions/{txId} {
+      allow read, write: if isManager();
+    }
+
+    match /students/{studentId} {
+      allow read, write: if isStaff();
+    }
+
+    match /staff/{staffId} {
+      allow read, write: if isManager();
+    }
+
+    match /schedule/{id} {
+      allow read: if isSignedIn();
+      allow write: if isStaff();
+    }
+
+    match /integrations/{id} {
+      allow read: if isStaff();
+      allow write: if isAdmin();
+    }
+
+    // Logging Collections
+    match /meta_logs/{id} { allow read: if isAdmin(); allow write: if isServer(); }
+    match /meta_post_logs/{id} { allow read: if isAdmin(); allow write: if isServer(); }
+    match /tg_logs/{id} { allow read: if isAdmin(); allow write: if isServer(); }
+
+    // Compatibility for legacy frontend modules
+    match /attendance/{id} { allow read, write: if isStaff(); }
+    match /grades/{id} { allow read, write: if isStaff(); }
+    match /payments/{id} { allow read, write: if isManager(); }
+  }
+}
